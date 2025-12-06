@@ -128,9 +128,19 @@ class TournamentSystem {
             this.createTournament('mixed', 'Gece Karışık Turnuvası');
         });
 
-        // Test için her dakika (geliştirme aşamasında)
-        cron.schedule('* * * * *', () => {
-            if (this.tournaments.size === 0) {
+        // Test için her 2 dakika (geliştirme aşamasında)
+        cron.schedule('*/2 * * * *', () => {
+            console.log(`=== Cron Check ===`);
+            console.log(`Active tournaments: ${this.tournaments.size}`);
+            
+            // Aktif veya bekleyen turnuva var mı kontrol et
+            const activeTournaments = Array.from(this.tournaments.values())
+                .filter(t => t.status === 'waiting' || t.status === 'active');
+            
+            console.log(`Active/Waiting tournaments: ${activeTournaments.length}`);
+            
+            if (activeTournaments.length === 0) {
+                console.log('Creating new tournament...');
                 this.createTournament('mixed', 'Test Turnuvası');
             }
         });
@@ -158,10 +168,10 @@ class TournamentSystem {
 
         this.tournaments.set(tournamentId, tournament);
         
-        // 5 dakika sonra başlat
+        // 2 dakika sonra başlat (test için kısaltıldı)
         setTimeout(() => {
             this.startTournament(tournamentId);
-        }, 5 * 60 * 1000);
+        }, 2 * 60 * 1000);
 
         // Tüm kullanıcılara bildirim gönder
         this.io.emit('tournament_created', {
@@ -200,11 +210,24 @@ class TournamentSystem {
 
     // Turnuvaya katıl
     joinTournament(tournamentId, userId, userInfo) {
+        console.log(`=== Join Tournament Debug ===`);
+        console.log(`Tournament ID: ${tournamentId}`);
+        console.log(`User ID: ${userId}`);
+        console.log(`User Info:`, userInfo);
+        
         const tournament = this.tournaments.get(tournamentId);
-        if (!tournament) return { success: false, error: 'Turnuva bulunamadı' };
+        if (!tournament) {
+            console.log(`ERROR: Tournament not found: ${tournamentId}`);
+            console.log(`Available tournaments:`, Array.from(this.tournaments.keys()));
+            return { success: false, error: 'Turnuva bulunamadı' };
+        }
 
+        console.log(`Tournament status: ${tournament.status}`);
+        console.log(`Tournament participants: ${tournament.participants.size}/${tournament.maxParticipants}`);
+        
         if (tournament.status !== 'waiting') {
-            return { success: false, error: 'Turnuva zaten başlamış' };
+            console.log(`ERROR: Tournament not waiting: ${tournament.status}`);
+            return { success: false, error: `Turnuva durumu: ${tournament.status}` };
         }
 
         if (tournament.participants.size >= tournament.maxParticipants) {
@@ -337,19 +360,44 @@ class TournamentSystem {
 
     // Cevap al
     submitAnswer(tournamentId, userId, questionId, answer, answerTime) {
+        console.log(`=== Submit Answer Debug ===`);
+        console.log(`Tournament ID: ${tournamentId}`);
+        console.log(`User ID: ${userId}`);
+        console.log(`Question ID: ${questionId}`);
+        console.log(`Answer: ${answer}`);
+        console.log(`Answer Time: ${answerTime}`);
+        
         const tournament = this.tournaments.get(tournamentId);
-        if (!tournament || tournament.status !== 'active') {
-            return { success: false, error: 'Geçersiz turnuva' };
+        if (!tournament) {
+            console.log(`ERROR: Tournament not found: ${tournamentId}`);
+            return { success: false, error: 'Turnuva bulunamadı' };
+        }
+        
+        if (tournament.status !== 'active') {
+            console.log(`ERROR: Tournament not active: ${tournament.status}`);
+            return { success: false, error: 'Turnuva aktif değil' };
         }
 
         const participant = tournament.participants.get(userId);
-        if (!participant || !participant.isActive) {
-            return { success: false, error: 'Geçersiz katılımcı' };
+        if (!participant) {
+            console.log(`ERROR: Participant not found: ${userId}`);
+            return { success: false, error: 'Katılımcı bulunamadı' };
+        }
+        
+        if (!participant.isActive) {
+            console.log(`ERROR: Participant not active: ${userId}`);
+            return { success: false, error: 'Katılımcı aktif değil' };
         }
 
         const currentQuestion = this.getCurrentQuestion(tournament);
-        if (!currentQuestion || currentQuestion.id !== questionId) {
-            return { success: false, error: 'Geçersiz soru' };
+        if (!currentQuestion) {
+            console.log(`ERROR: No current question`);
+            return { success: false, error: 'Aktif soru yok' };
+        }
+        
+        if (currentQuestion.id !== questionId) {
+            console.log(`ERROR: Question ID mismatch. Expected: ${currentQuestion.id}, Got: ${questionId}`);
+            return { success: false, error: 'Soru ID uyuşmuyor' };
         }
 
         // Zaten cevapladı mı kontrol et
