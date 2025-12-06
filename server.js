@@ -43,6 +43,21 @@ app.get('/paytr/callback', (req, res) => {
     res.status(200).send('OK');
 });
 
+// PayTR Token Endpoint - Android uygulaması için
+app.post('/paytr/get-token', (req, res) => {
+    console.log('=== PayTR Token Request ===');
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+    console.log('==========================');
+    
+    // Şimdilik mock response döndür - gerçek PayTR entegrasyonu için
+    // PayTR API'sine istek atılacak
+    res.json({
+        success: false,
+        error: 'PayTR token endpoint henüz aktif değil. Canlı mod onayı bekleniyor.',
+        message: 'Bu endpoint PayTR canlı mod onayından sonra aktif olacak.'
+    });
+});
+
 // Health check
 app.get('/health', (req, res) => {
     res.json({
