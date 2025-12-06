@@ -128,10 +128,13 @@ class TournamentSystem {
             this.createTournament('mixed', 'Gece Karışık Turnuvası');
         });
 
-        // Test için her 2 dakika (geliştirme aşamasında)
-        cron.schedule('*/2 * * * *', () => {
+        // Test için her dakika (geliştirme aşamasında)
+        cron.schedule('* * * * *', () => {
             console.log(`=== Cron Check ===`);
-            console.log(`Active tournaments: ${this.tournaments.size}`);
+            console.log(`Total tournaments: ${this.tournaments.size}`);
+            
+            // Eski turnuvaları temizle
+            this.cleanupOldTournaments();
             
             // Aktif veya bekleyen turnuva var mı kontrol et
             const activeTournaments = Array.from(this.tournaments.values())
@@ -565,7 +568,29 @@ class TournamentSystem {
         setTimeout(() => {
             this.tournaments.delete(tournamentId);
             console.log(`🗑️ Turnuva silindi: ${tournamentId}`);
-        }, 30 * 1000); // 30 saniye sonra sil
+        }, 10 * 1000); // 10 saniye sonra sil
+    }
+
+    // Eski turnuvaları temizle
+    cleanupOldTournaments() {
+        const now = Date.now();
+        const toDelete = [];
+        
+        this.tournaments.forEach((tournament, id) => {
+            // 5 dakikadan eski finished turnuvaları sil
+            if (tournament.status === 'finished' && (now - tournament.endTime) > 5 * 60 * 1000) {
+                toDelete.push(id);
+            }
+            // 10 dakikadan eski active turnuvaları sil (stuck durumlar için)
+            else if (tournament.status === 'active' && (now - tournament.startTime) > 10 * 60 * 1000) {
+                toDelete.push(id);
+            }
+        });
+        
+        toDelete.forEach(id => {
+            console.log(`🗑️ Eski turnuva temizlendi: ${id}`);
+            this.tournaments.delete(id);
+        });
     }
 
     // Liderboard güncelle

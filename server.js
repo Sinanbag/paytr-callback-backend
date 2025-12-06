@@ -173,6 +173,16 @@ app.post('/api/tournaments/create', (req, res) => {
     });
 });
 
+// Tüm turnuvaları temizle (test için)
+app.post('/api/tournaments/cleanup', (req, res) => {
+    console.log('Tüm turnuvalar temizleniyor...');
+    tournamentSystem.tournaments.clear();
+    res.json({
+        success: true,
+        message: 'Tüm turnuvalar temizlendi'
+    });
+});
+
 app.post('/api/tournaments/:tournamentId/join', (req, res) => {
     const { tournamentId } = req.params;
     const { userId, username } = req.body;
