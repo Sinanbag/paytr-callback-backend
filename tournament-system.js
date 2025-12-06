@@ -171,7 +171,7 @@ class TournamentSystem {
         // 2 dakika sonra başlat (test için kısaltıldı)
         setTimeout(() => {
             this.startTournament(tournamentId);
-        }, 2 * 60 * 1000);
+        }, 1 * 60 * 1000);
 
         // Tüm kullanıcılara bildirim gönder
         this.io.emit('tournament_created', {
@@ -561,10 +561,11 @@ class TournamentSystem {
             this.participants.delete(userId);
         });
 
-        // 1 saat sonra turnuvayı sil
+        // Turnuvayı hemen sil (test için)
         setTimeout(() => {
             this.tournaments.delete(tournamentId);
-        }, 60 * 60 * 1000);
+            console.log(`🗑️ Turnuva silindi: ${tournamentId}`);
+        }, 30 * 1000); // 30 saniye sonra sil
     }
 
     // Liderboard güncelle
@@ -682,9 +683,20 @@ class TournamentSystem {
 
     // Aktif turnuvaları getir
     getActiveTournaments() {
-        return Array.from(this.tournaments.values())
-            .filter(t => t.status === 'waiting' || t.status === 'active')
+        console.log(`=== Get Active Tournaments ===`);
+        console.log(`Total tournaments: ${this.tournaments.size}`);
+        
+        const activeTournaments = Array.from(this.tournaments.values())
+            .filter(t => {
+                console.log(`Tournament ${t.id}: status=${t.status}, participants=${t.participants.size}`);
+                return t.status === 'waiting' || t.status === 'active';
+            })
             .map(t => this.getTournamentInfo(t));
+            
+        console.log(`Active tournaments: ${activeTournaments.length}`);
+        console.log(`===============================`);
+        
+        return activeTournaments;
     }
 
     // Kullanıcının aktif turnuvası

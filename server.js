@@ -162,6 +162,17 @@ app.get('/api/tournaments', (req, res) => {
     });
 });
 
+// Manuel turnuva oluştur (test için)
+app.post('/api/tournaments/create', (req, res) => {
+    console.log('Manuel turnuva oluşturma isteği');
+    const tournamentId = tournamentSystem.createTournament('mixed', 'Manuel Test Turnuvası');
+    res.json({
+        success: true,
+        tournamentId: tournamentId,
+        message: 'Turnuva oluşturuldu, 1 dakika sonra başlayacak'
+    });
+});
+
 app.post('/api/tournaments/:tournamentId/join', (req, res) => {
     const { tournamentId } = req.params;
     const { userId, username } = req.body;
