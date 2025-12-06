@@ -2,9 +2,23 @@ const express = require('express');
 const cors = require('cors');
 const https = require('https');
 const crypto = require('crypto');
+const { createServer } = require('http');
+const { Server } = require('socket.io');
+const TournamentSystem = require('./tournament-system');
 
 const app = express();
+const server = createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
+
 const PORT = process.env.PORT || 10000;
+
+// Turnuva sistemi başlat
+const tournamentSystem = new TournamentSystem(io);
 
 // Middleware
 app.use(cors());
@@ -139,13 +153,63 @@ app.get('/fail', (req, res) => {
     `);
 });
 
+// Turnuva API'leri
+app.get('/api/tournaments', (req, res) => {
+    const tournaments = tournamentSystem.getActiveTournaments();
+    res.json({
+        success: true,
+        tournaments: tournaments
+    });
+});
+
+app.post('/api/tournaments/:tournamentId/join', (req, res) => {
+    const { tournamentId } = req.params;
+    const { userId, username } = req.body;
+    
+    if (!userId || !username) {
+        return res.json({
+            success: false,
+            error: 'userId ve username gerekli'
+        });
+    }
+    
+    const result = tournamentSystem.joinTournament(tournamentId, userId, { username });
+    res.json(result);
+});
+
+app.post('/api/tournaments/:tournamentId/answer', (req, res) => {
+    const { tournamentId } = req.params;
+    const { userId, questionId, answer, answerTime } = req.body;
+    
+    if (!userId || questionId === undefined || answer === undefined || !answerTime) {
+        return res.json({
+            success: false,
+            error: 'Eksik parametreler'
+        });
+    }
+    
+    const result = tournamentSystem.submitAnswer(tournamentId, userId, questionId, answer, answerTime);
+    res.json(result);
+});
+
+app.get('/api/user/:userId/tournament', (req, res) => {
+    const { userId } = req.params;
+    const tournament = tournamentSystem.getUserActiveTournament(userId);
+    
+    res.json({
+        success: true,
+        tournament: tournament
+    });
+});
+
 // Health check
 app.get('/health', (req, res) => {
     res.json({
         status: 'OK',
-        service: 'PayTR Callback Backend',
+        service: 'PayTR Callback Backend + Tournament System',
         timestamp: new Date().toISOString(),
-        uptime: process.uptime()
+        uptime: process.uptime(),
+        activeTournaments: tournamentSystem.getActiveTournaments().length
     });
 });
 
@@ -188,10 +252,59 @@ function keepAlive() {
 // Her 10 dakikada bir keep-alive
 setInterval(keepAlive, 10 * 60 * 1000); // 10 dakika
 
-app.listen(PORT, () => {
-    console.log(`🚀 PayTR Callback Backend running on port ${PORT}`);
+// Socket.IO bağlantı yönetimi
+io.on('connection', (socket) => {
+    console.log(`🔌 Kullanıcı bağlandı: ${socket.id}`);
+    
+    // Turnuvaya katıl
+    socket.on('join_tournament', (data) => {
+        const { tournamentId, userId } = data;
+        socket.join(`tournament_${tournamentId}`);
+        socket.userId = userId;
+        socket.tournamentId = tournamentId;
+        console.log(`👤 ${userId} turnuva odasına katıldı: ${tournamentId}`);
+    });
+    
+    // Şüpheli aktivite raporu
+    socket.on('suspicious_activity', (data) => {
+        const { userId, type, details } = data;
+        console.log(`⚠️ Şüpheli aktivite raporu: ${userId} - ${type}`, details);
+        
+        // Turnuva sistemine bildir
+        const tournamentId = socket.tournamentId;
+        if (tournamentId) {
+            const tournament = tournamentSystem.tournaments.get(tournamentId);
+            if (tournament) {
+                const participant = tournament.participants.get(userId);
+                if (participant) {
+                    let points = 0;
+                    switch (type) {
+                        case 'APP_SWITCH': points = 20; break;
+                        case 'SCREEN_RECORD': points = 30; break;
+                        case 'CAMERA_USAGE': points = 25; break;
+                        case 'MULTI_TOUCH': points = 15; break;
+                        default: points = 10;
+                    }
+                    tournamentSystem.addSuspiciousActivity(participant, type, points);
+                }
+            }
+        }
+    });
+    
+    // Bağlantı koptu
+    socket.on('disconnect', () => {
+        console.log(`🔌 Kullanıcı ayrıldı: ${socket.id}`);
+        if (socket.tournamentId) {
+            socket.leave(`tournament_${socket.tournamentId}`);
+        }
+    });
+});
+
+server.listen(PORT, () => {
+    console.log(`🚀 PayTR Callback Backend + Tournament System running on port ${PORT}`);
     console.log(`📍 Callback URL: https://paytr-callback-backend.onrender.com/paytr/callback`);
     console.log(`📍 Health Check: https://paytr-callback-backend.onrender.com/health`);
+    console.log(`🏆 Tournament API: https://paytr-callback-backend.onrender.com/api/tournaments`);
     console.log(`🔄 Keep-Alive: Her 10 dakikada bir ping`);
     
     // İlk keep-alive
