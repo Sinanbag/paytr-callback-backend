@@ -1,5 +1,7 @@
 const express = require('express');
 const cors = require('cors');
+const https = require('https');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -22,13 +24,26 @@ app.get('/', (req, res) => {
     });
 });
 
-// PayTR Callback Endpoint - SADECE "OK" DÖNDÜR
+// PayTR Callback Endpoint - GÜVENLİK İLE
 app.post('/paytr/callback', (req, res) => {
     console.log('=== PayTR Callback Received ===');
     console.log('Timestamp:', new Date().toISOString());
     console.log('Headers:', JSON.stringify(req.headers, null, 2));
     console.log('Body:', JSON.stringify(req.body, null, 2));
     console.log('Query:', JSON.stringify(req.query, null, 2));
+    
+    // Güvenlik: IP Kontrolü (PayTR IP'leri)
+    const clientIP = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    console.log('Client IP:', clientIP);
+    
+    // Güvenlik: User-Agent Kontrolü
+    const userAgent = req.headers['user-agent'] || '';
+    console.log('User-Agent:', userAgent);
+    
+    // TODO: Canlı modda PayTR hash doğrulaması eklenecek
+    // const { merchant_key, merchant_salt } = PayTRConfig;
+    // const hash = crypto.createHmac('sha256', merchant_key).update(...).digest('base64');
+    
     console.log('================================');
     
     // PayTR'nin beklediği basit "OK" cevabı
@@ -56,6 +71,72 @@ app.post('/paytr/get-token', (req, res) => {
         error: 'PayTR token endpoint henüz aktif değil. Canlı mod onayı bekleniyor.',
         message: 'Bu endpoint PayTR canlı mod onayından sonra aktif olacak.'
     });
+});
+
+// PayTR Success Page
+app.get('/success', (req, res) => {
+    console.log('=== PayTR Success Page ===');
+    console.log('Query params:', req.query);
+    console.log('==========================');
+    
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Ödeme Başarılı</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body { font-family: Arial; text-align: center; padding: 50px; background: #f0f8ff; }
+                .success { color: #28a745; font-size: 24px; margin: 20px 0; }
+                .info { color: #666; margin: 10px 0; }
+                .button { 
+                    background: #28a745; color: white; padding: 15px 30px; 
+                    text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0;
+                }
+            </style>
+        </head>
+        <body>
+            <h1 class="success">✅ Ödeme Başarıyla Tamamlandı!</h1>
+            <p class="info">TYT Koçluk uygulamanıza dönebilirsiniz.</p>
+            <p class="info">İşlem ID: ${req.query.merchant_oid || 'N/A'}</p>
+            <a href="#" class="button" onclick="window.close()">Uygulamaya Dön</a>
+        </body>
+        </html>
+    `);
+});
+
+// PayTR Fail Page
+app.get('/fail', (req, res) => {
+    console.log('=== PayTR Fail Page ===');
+    console.log('Query params:', req.query);
+    console.log('=========================');
+    
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>Ödeme Başarısız</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <style>
+                body { font-family: Arial; text-align: center; padding: 50px; background: #fff5f5; }
+                .error { color: #dc3545; font-size: 24px; margin: 20px 0; }
+                .info { color: #666; margin: 10px 0; }
+                .button { 
+                    background: #dc3545; color: white; padding: 15px 30px; 
+                    text-decoration: none; border-radius: 5px; display: inline-block; margin: 20px 0;
+                }
+            </style>
+        </head>
+        <body>
+            <h1 class="error">❌ Ödeme İşlemi Başarısız</h1>
+            <p class="info">Ödeme işlemi tamamlanamadı. Lütfen tekrar deneyiniz.</p>
+            <p class="info">Hata: ${req.query.failed_reason_msg || 'Bilinmeyen hata'}</p>
+            <a href="#" class="button" onclick="window.close()">Uygulamaya Dön</a>
+        </body>
+        </html>
+    `);
 });
 
 // Health check
@@ -93,8 +174,26 @@ app.use((err, req, res, next) => {
     });
 });
 
+// Keep-Alive Service - Cold Start Önleme
+function keepAlive() {
+    const url = 'https://paytr-callback-backend.onrender.com/health';
+    
+    https.get(url, (res) => {
+        console.log(`Keep-Alive: ${res.statusCode} - ${new Date().toISOString()}`);
+    }).on('error', (err) => {
+        console.error('Keep-Alive Error:', err.message);
+    });
+}
+
+// Her 10 dakikada bir keep-alive
+setInterval(keepAlive, 10 * 60 * 1000); // 10 dakika
+
 app.listen(PORT, () => {
     console.log(`🚀 PayTR Callback Backend running on port ${PORT}`);
-    console.log(`📍 Callback URL: https://your-app-name.onrender.com/paytr/callback`);
-    console.log(`📍 Health Check: https://your-app-name.onrender.com/health`);
+    console.log(`📍 Callback URL: https://paytr-callback-backend.onrender.com/paytr/callback`);
+    console.log(`📍 Health Check: https://paytr-callback-backend.onrender.com/health`);
+    console.log(`🔄 Keep-Alive: Her 10 dakikada bir ping`);
+    
+    // İlk keep-alive
+    setTimeout(keepAlive, 30000); // 30 saniye sonra başlat
 });
